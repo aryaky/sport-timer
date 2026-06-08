@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>运动计时器</title>
+  <style>
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      background: #f0f2f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+    }
+
+    /* ===== Floating Widget ===== */
+    #timer-widget {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 300px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.12),
+        0 2px 8px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 rgba(255,255,255,0.8);
+      overflow: hidden;
+      transition: box-shadow 0.3s ease, transform 0.3s ease;
+      z-index: 9999;
+      user-select: none;
+    }
+
+    #timer-widget:hover {
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.16),
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255,255,255,0.8);
+      transform: translateY(-2px);
+    }
+
+    /* ===== Color Theme Bar ===== */
+    #theme-bar {
+      height: 4px;
+      background: linear-gradient(90deg, #ff6b35, #f7931e);
+      transition: background 0.6s ease, opacity 0.3s ease;
+      width: 100%;
+    }
+
+    #timer-widget.phase-rest #theme-bar {
+      background: linear-gradient(90deg, #00b4d8, #48cae4);
+    }
+
+    #timer-widget.phase-done #theme-bar {
+      background: linear-gradient(90deg, #7bc67e, #52c41a);
+    }
+
+    /* ===== Widget Header ===== */
+    #widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 8px;
+    }
+
+    #widget-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    #phase-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: #fff;
+      letter-spacing: 0.5px;
+      transition: background 0.6s ease, transform 0.2s ease, opacity 0.3s;
+      opacity: 0;
+    }
+
+    #phase-badge.visible {
+      opacity: 1;
+    }
+
+    #timer-widget.phase-rest #phase-badge {
+      background: linear-gradient(135deg, #00b4d8, #48cae4);
+    }
+
+    #timer-widget.phase-done #phase-badge {
+      background: linear-gradient(135deg, #7bc67e, #52c41a);
+    }
+
+    /* ===== Setup View ===== */
+    #setup-view {
+      padding: 8px 16px 16px;
+    }
+
+    .field-group {
+      margin-bottom: 12px;
+    }
+
+    .field-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+
+    .field-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .field-row .field-group {
+      flex: 1;
+    }
+
+    .input-wrap {
+      display: flex;
+      align-items: center;
+      background: #f5f5f7;
+      border-radius: 10px;
+      border: 1.5px solid transparent;
+      transition: border-color 0.2s, background 0.2s;
+      overflow: hidden;
+    }
+
+    .input-wrap:focus-within {
+      border-color: #ff6b35;
+      background: #fff;
+    }
+
+    .input-wrap input[type="number"] {
+      width: 100%;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 16px;
+      font-weight: 700;
+      color: #222;
+      padding: 8px 10px;
+      text-align: center;
+      -moz-appearance: textfield;
+    }
+
+    .input-wrap input[type="number"]::-webkit-outer-spin-button,
+    .input-wrap input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+    }
+
+    .input-suffix {
+      font-size: 11px;
+      color: #aaa;
+      padding-right: 10px;
+      white-space: nowrap;
+    }
+
+    /* Stepper buttons */
+    .stepper-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      color: #bbb;
+      padding: 0 8px;
+      line-height: 1;
+      transition: color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .stepper-btn:hover {
+      color: #ff6b35;
+    }
+
+    /* ===== Start Button ===== */
+    #btn-start {
+      display: block;
+      width: 100%;
+      margin-top: 4px;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 12px rgba(255, 107, 53, 0.35);
+    }
+
+    #btn-start:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(255, 107, 53, 0.45);
+    }
+
+    #btn-start:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+    }
+
+    /* ===== Timer View ===== */
+    #timer-view {
+      display: none;
+      padding: 4px 16px 16px;
+    }
+
+    /* Countdown circle & number */
+    #countdown-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0 6px;
+    }
+
+    #circle-svg {
+      display: block;
+      overflow: visible;
+    }
+
+    #circle-bg {
+      fill: none;
+      stroke: #f0f0f0;
+      stroke-width: 6;
+    }
+
+    #circle-progress {
+      fill: none;
+      stroke: #ff6b35;
+      stroke-width: 6;
+      stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+      transition: stroke-dashoffset 0.9s linear, stroke 0.6s ease;
+    }
+
+    #timer-widget.phase-rest #circle-progress {
+      stroke: #00b4d8;
+    }
+
+    #timer-widget.phase-done #circle-progress {
+      stroke: #52c41a;
+    }
+
+    #countdown-number {
+      font-size: 42px;
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: -2px;
+      line-height: 1;
+      margin-top: -2px;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.3s;
+    }
+
+    #countdown-number.flash {
+      animation: flash-anim 0.4s ease;
+    }
+
+    @keyframes flash-anim {
+      0%   { opacity: 1; transform: scale(1); }
+      30%  { opacity: 0.3; transform: scale(1.08); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Round info */
+    #round-info {
+      font-size: 12px;
+      color: #999;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    #round-info strong {
+      color: #444;
+      font-size: 14px;
+    }
+
+    /* Progress bar */
+    #progress-track {
+      width: 100%;
+      height: 5px;
+      background: #f0f0f0;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    #progress-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #ff6b35, #f7931e);
+      width: 0%;
+      transition: width 0.9s linear, background 0.6s ease;
+    }
+
+    #timer-widget.phase-rest #progress-fill {
+      background: linear-gradient(90deg, #00b4d8, #48cae4);
+    }
+
+    #timer-widget.phase-done #progress-fill {
+      background: linear-gradient(90deg, #7bc67e, #52c41a);
+    }
+
+    /* Control buttons */
+    #controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .ctrl-btn {
+      flex: 1;
+      padding: 9px 0;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .ctrl-btn:hover {
+      opacity: 0.88;
+      transform: translateY(-1px);
+    }
+
+    .ctrl-btn:active {
+      transform: translateY(0);
+      opacity: 0.75;
+    }
+
+    #btn-pause {
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(255,107,53,0.3);
+    }
+
+    #timer-widget.phase-rest #btn-pause {
+      background: linear-gradient(135deg, #00b4d8, #48cae4);
+      box-shadow: 0 3px 10px rgba(0,180,216,0.3);
+    }
+
+    #btn-reset {
+      background: #f0f0f2;
+      color: #666;
+    }
+
+    #btn-reset:hover {
+      background: #e8e8ea;
+    }
+
+    /* ===== Done View ===== */
+    #done-view {
+      display: none;
+      padding: 12px 16px 20px;
+      text-align: center;
+    }
+
+    #done-icon {
+      font-size: 40px;
+      margin-bottom: 8px;
+      animation: pop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes pop-in {
+      0%   { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    #done-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+    }
+
+    #done-subtitle {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 16px;
+    }
+
+    #btn-redo {
+      display: inline-block;
+      padding: 10px 28px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #7bc67e, #52c41a);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      box-shadow: 0 4px 12px rgba(82, 196, 26, 0.35);
+    }
+
+    #btn-redo:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    /* ===== Phase Transition Overlay ===== */
+    #phase-flash {
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    #phase-flash.active {
+      animation: phase-flash-anim 0.6s ease forwards;
+    }
+
+    @keyframes phase-flash-anim {
+      0%   { opacity: 0.35; }
+      100% { opacity: 0; }
+    }
+
+    /* ===== Minimized State ===== */
+    #minimize-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: #ccc;
+      padding: 2px 4px;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    #minimize-btn:hover {
+      color: #999;
+    }
+
+    #timer-widget.minimized #setup-view,
+    #timer-widget.minimized #timer-view,
+    #timer-widget.minimized #done-view {
+      display: none !important;
+    }
+
+    #timer-widget.minimized {
+      width: auto;
+    }
+
+    #mini-display {
+      display: none;
+      padding: 4px 16px 12px;
+      font-size: 13px;
+      color: #555;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #timer-widget.minimized #mini-display {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ====== Floating Widget ====== -->
+<div id="timer-widget">
+  <!-- Color accent bar -->
+  <div id="theme-bar"></div>
+
+  <!-- Phase flash overlay -->
+  <div id="phase-flash"></div>
+
+  <!-- Header -->
+  <div id="widget-header">
+    <span id="widget-title">🏃 运动计时器</span>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span id="phase-badge">运动中</span>
+      <button id="minimize-btn" title="最小化">—</button>
+    </div>
+  </div>
+
+  <!-- Mini display (minimized state) -->
+  <div id="mini-display">等待开始</div>
+
+  <!-- ====== Setup View ====== -->
+  <div id="setup-view">
+    <div class="field-group">
+      <label>总轮次</label>
+      <div class="input-wrap">
+        <button class="stepper-btn" data-target="input-rounds" data-delta="-1">−</button>
+        <input type="number" id="input-rounds" value="3" min="1" max="99" />
+        <button class="stepper-btn" data-target="input-rounds" data-delta="1">+</button>
+        <span class="input-suffix">轮</span>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field-group">
+        <label>运动时长</label>
+        <div class="input-wrap">
+          <button class="stepper-btn" data-target="input-exercise" data-delta="-5">−</button>
+          <input type="number" id="input-exercise" value="45" min="1" max="3600" />
+          <button class="stepper-btn" data-target="input-exercise" data-delta="5">+</button>
+          <span class="input-suffix">秒</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>休息时长</label>
+        <div class="input-wrap">
+          <button class="stepper-btn" data-target="input-rest" data-delta="-5">−</button>
+          <input type="number" id="input-rest" value="15" min="1" max="3600" />
+          <button class="stepper-btn" data-target="input-rest" data-delta="5">+</button>
+          <span class="input-suffix">秒</span>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-start">开始训练</button>
+  </div>
+
+  <!-- ====== Timer View ====== -->
+  <div id="timer-view">
+    <!-- SVG circle progress -->
+    <div id="countdown-area">
+      <div style="position:relative;width:120px;height:120px;">
+        <svg id="circle-svg" width="120" height="120" viewBox="0 0 120 120">
+          <circle id="circle-bg" cx="60" cy="60" r="50" />
+          <circle id="circle-progress" cx="60" cy="60" r="50" />
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <div id="countdown-number">00:45</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Round info -->
+    <div id="round-info">
+      第 <strong id="current-round">1</strong> / <span id="total-rounds">3</span> 轮
+    </div>
+
+    <!-- Phase progress bar -->
+    <div id="progress-track">
+      <div id="progress-fill"></div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controls">
+      <button class="ctrl-btn" id="btn-pause">暂停</button>
+      <button class="ctrl-btn" id="btn-reset">重置</button>
+    </div>
+  </div>
+
+  <!-- ====== Done View ====== -->
+  <div id="done-view">
+    <div id="done-icon">🎉</div>
+    <div id="done-title">训练完成！</div>
+    <div id="done-subtitle">太棒了，继续保持！</div>
+    <button id="btn-redo">重新设置</button>
+  </div>
+</div>
+
+<script>
+  /* ============================================================
+   *  State
+   * ============================================================ */
+  const state = {
+    /** 'setup' | 'running' | 'paused' | 'done' */
+    view: 'setup',
+    /** 'exercise' | 'rest' */
+    phase: 'exercise',
+    totalRounds: 3,
+    exerciseSec: 45,
+    restSec: 15,
+    currentRound: 1,
+    /** remaining seconds in current phase */
+    remaining: 0,
+    /** total seconds for current phase (for progress calc) */
+    phaseDuration: 0,
+    timerId: null,
+  };
+
+  /* ============================================================
+   *  DOM references
+   * ============================================================ */
+  const widget        = document.getElementById('timer-widget');
+  const themeBar      = document.getElementById('theme-bar');
+  const phaseBadge    = document.getElementById('phase-badge');
+  const phaseFlash    = document.getElementById('phase-flash');
+  const miniDisplay   = document.getElementById('mini-display');
+
+  const setupView     = document.getElementById('setup-view');
+  const timerView     = document.getElementById('timer-view');
+  const doneView      = document.getElementById('done-view');
+
+  const inputRounds   = document.getElementById('input-rounds');
+  const inputExercise = document.getElementById('input-exercise');
+  const inputRest     = document.getElementById('input-rest');
+  const btnStart      = document.getElementById('btn-start');
+
+  const countdownNum  = document.getElementById('countdown-number');
+  const circleProgress = document.getElementById('circle-progress');
+  const currentRoundEl = document.getElementById('current-round');
+  const totalRoundsEl  = document.getElementById('total-rounds');
+  const progressFill  = document.getElementById('progress-fill');
+  const btnPause      = document.getElementById('btn-pause');
+  const btnReset      = document.getElementById('btn-reset');
+
+  const doneSubtitle  = document.getElementById('done-subtitle');
+  const btnRedo       = document.getElementById('btn-redo');
+  const minimizeBtn   = document.getElementById('minimize-btn');
+
+  /* SVG circle circumference */
+  const RADIUS = 50;
+  const CIRC   = 2 * Math.PI * RADIUS; // ≈ 314.16
+  circleProgress.style.strokeDasharray  = CIRC;
+  circleProgress.style.strokeDashoffset = 0;
+
+  /* ============================================================
+   *  Audio: simple beep via Web Audio API
+   * ============================================================ */
+  let audioCtx = null;
+
+  function ensureAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+  }
+
+  /**
+   * Play a beep tone.
+   * @param {number} freq   - Frequency in Hz
+   * @param {number} dur    - Duration in seconds
+   * @param {'sine'|'square'|'triangle'} type - Oscillator waveform
+   * @param {number} [vol=0.3] - Gain 0-1
+   */
+  function beep(freq, dur, type, vol) {
+    vol = vol !== undefined ? vol : 0.3;
+    try {
+      ensureAudio();
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + dur);
+    } catch (e) {
+      // ignore audio errors silently
+    }
+  }
+
+  function playPhaseStart() {
+    beep(880, 0.12, 'sine', 0.25);
+    setTimeout(() => beep(1100, 0.18, 'sine', 0.2), 130);
+  }
+
+  function playDone() {
+    beep(523, 0.15, 'sine', 0.2);
+    setTimeout(() => beep(659, 0.15, 'sine', 0.2), 160);
+    setTimeout(() => beep(784, 0.25, 'sine', 0.25), 320);
+  }
+
+  function playCountdown() {
+    beep(440, 0.08, 'square', 0.15);
+  }
+
+  /* ============================================================
+   *  Helpers
+   * ============================================================ */
+  /**
+   * Format seconds to MM:SS string.
+   * @param {number} sec
+   * @returns {string}
+   */
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  /** Clamp value between min and max. */
+  function clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+  }
+
+  /** Read a positive-integer input value. */
+  function readInt(el, fallback) {
+    const v = parseInt(el.value, 10);
+    return (isFinite(v) && v > 0) ? v : fallback;
+  }
+
+  /* ============================================================
+   *  UI Update
+   * ============================================================ */
+  function updatePhaseClass() {
+    widget.classList.remove('phase-rest', 'phase-done');
+    if (state.view === 'done') {
+      widget.classList.add('phase-done');
+    } else if (state.phase === 'rest') {
+      widget.classList.add('phase-rest');
+    }
+  }
+
+  function updateCircle() {
+    const ratio = state.phaseDuration > 0
+      ? state.remaining / state.phaseDuration
+      : 1;
+    const offset = CIRC * (1 - ratio);
+    circleProgress.style.strokeDashoffset = offset;
+  }
+
+  function updateProgressBar() {
+    const ratio = state.phaseDuration > 0
+      ? state.remaining / state.phaseDuration
+      : 1;
+    progressFill.style.width = (ratio * 100) + '%';
+  }
+
+  function updateCountdownDisplay() {
+    countdownNum.textContent = formatTime(state.remaining);
+  }
+
+  function updateRoundDisplay() {
+    currentRoundEl.textContent = state.currentRound;
+    totalRoundsEl.textContent  = state.totalRounds;
+  }
+
+  function updateBadge() {
+    if (state.view === 'running' || state.view === 'paused') {
+      phaseBadge.textContent = state.phase === 'exercise' ? '运动中' : '休息中';
+      phaseBadge.classList.add('visible');
+    } else {
+      phaseBadge.classList.remove('visible');
+    }
+  }
+
+  function updateMiniDisplay() {
+    if (state.view === 'running' || state.view === 'paused') {
+      const label = state.phase === 'exercise' ? '运动' : '休息';
+      miniDisplay.textContent = `${label} ${formatTime(state.remaining)} · 第${state.currentRound}/${state.totalRounds}轮`;
+    } else if (state.view === 'done') {
+      miniDisplay.textContent = '训练完成 🎉';
+    } else {
+      miniDisplay.textContent = '等待开始';
+    }
+  }
+
+  function renderTimerView() {
+    updateCountdownDisplay();
+    updateCircle();
+    updateProgressBar();
+    updateRoundDisplay();
+    updateBadge();
+    updatePhaseClass();
+    updateMiniDisplay();
+  }
+
+  /* ============================================================
+   *  View switching
+   * ============================================================ */
+  function showSetup() {
+    setupView.style.display = 'block';
+    timerView.style.display = 'none';
+    doneView.style.display  = 'none';
+    phaseBadge.classList.remove('visible');
+    widget.classList.remove('phase-rest', 'phase-done');
+    updateMiniDisplay();
+  }
+
+  function showTimer() {
+    setupView.style.display = 'none';
+    timerView.style.display = 'block';
+    doneView.style.display  = 'none';
+  }
+
+  function showDone() {
+    setupView.style.display = 'none';
+    timerView.style.display = 'none';
+    doneView.style.display  = 'block';
+  }
+
+  /* ============================================================
+   *  Phase flash overlay
+   * ============================================================ */
+  function triggerFlash(color) {
+    phaseFlash.style.background = color;
+    phaseFlash.classList.remove('active');
+    // force reflow
+    void phaseFlash.offsetWidth;
+    phaseFlash.classList.add('active');
+  }
+
+  /* ============================================================
+   *  Timer core
+   * ============================================================ */
+  function tick() {
+    if (state.view !== 'running') return;
+
+    // Beep on last 3 seconds of each phase
+    if (state.remaining <= 3 && state.remaining > 0) {
+      playCountdown();
+    }
+
+    state.remaining -= 1;
+
+    if (state.remaining <= 0) {
+      advancePhase();
+      return;
+    }
+
+    renderTimerView();
+  }
+
+  function advancePhase() {
+    if (state.phase === 'exercise') {
+      // Move to rest
+      if (state.currentRound >= state.totalRounds) {
+        // All rounds done
+        finishWorkout();
+        return;
+      }
+      state.phase = 'rest';
+      state.remaining = state.restSec;
+      state.phaseDuration = state.restSec;
+      triggerFlash('rgba(0, 180, 216, 0.25)');
+      playPhaseStart();
+    } else {
+      // rest → next exercise round
+      state.currentRound += 1;
+      state.phase = 'exercise';
+      state.remaining = state.exerciseSec;
+      state.phaseDuration = state.exerciseSec;
+      triggerFlash('rgba(255, 107, 53, 0.25)');
+      playPhaseStart();
+    }
+
+    renderTimerView();
+  }
+
+  function finishWorkout() {
+    clearInterval(state.timerId);
+    state.timerId = null;
+    state.view = 'done';
+    widget.classList.add('phase-done');
+    phaseBadge.classList.remove('visible');
+    updateMiniDisplay();
+    showDone();
+    playDone();
+    progressFill.style.width = '0%';
+    circleProgress.style.strokeDashoffset = 0;
+  }
+
+  function startTimer() {
+    if (state.timerId) {
+      clearInterval(state.timerId);
+    }
+    state.view = 'running';
+    state.timerId = setInterval(tick, 1000);
+  }
+
+  function pauseTimer() {
+    if (state.view === 'running') {
+      clearInterval(state.timerId);
+      state.timerId = null;
+      state.view = 'paused';
+      btnPause.textContent = '继续';
+      updateBadge();
+    } else if (state.view === 'paused') {
+      state.view = 'running';
+      state.timerId = setInterval(tick, 1000);
+      btnPause.textContent = '暂停';
+      updateBadge();
+    }
+  }
+
+  function resetTimer() {
+    clearInterval(state.timerId);
+    state.timerId = null;
+    state.view = 'setup';
+    state.phase = 'exercise';
+    state.currentRound = 1;
+    state.remaining = 0;
+    btnPause.textContent = '暂停';
+    progressFill.style.width = '0%';
+    circleProgress.style.strokeDashoffset = 0;
+    showSetup();
+  }
+
+  /* ============================================================
+   *  Event: Start
+   * ============================================================ */
+  btnStart.addEventListener('click', () => {
+    ensureAudio();
+    state.totalRounds  = readInt(inputRounds,   3);
+    state.exerciseSec  = readInt(inputExercise, 45);
+    state.restSec      = readInt(inputRest,     15);
+
+    state.currentRound  = 1;
+    state.phase         = 'exercise';
+    state.remaining     = state.exerciseSec;
+    state.phaseDuration = state.exerciseSec;
+
+    // Update done subtitle
+    const totalMin = Math.round(
+      (state.exerciseSec * state.totalRounds + state.restSec * (state.totalRounds - 1)) / 60
+    );
+    doneSubtitle.textContent = `完成了 ${state.totalRounds} 轮训练，约 ${totalMin} 分钟，太棒了！`;
+
+    showTimer();
+    renderTimerView();
+    playPhaseStart();
+    startTimer();
+  });
+
+  /* ============================================================
+   *  Event: Pause / Resume
+   * ============================================================ */
+  btnPause.addEventListener('click', pauseTimer);
+
+  /* ============================================================
+   *  Event: Reset
+   * ============================================================ */
+  btnReset.addEventListener('click', resetTimer);
+
+  /* ============================================================
+   *  Event: Redo (from done screen)
+   * ============================================================ */
+  btnRedo.addEventListener('click', () => {
+    widget.classList.remove('phase-done');
+    state.view = 'setup';
+    showSetup();
+  });
+
+  /* ============================================================
+   *  Event: Stepper buttons (+ / -)
+   * ============================================================ */
+  document.querySelectorAll('.stepper-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const delta    = parseInt(btn.dataset.delta, 10);
+      const input    = document.getElementById(targetId);
+      if (!input) return;
+      const min = parseInt(input.min, 10) || 1;
+      const max = parseInt(input.max, 10) || 9999;
+      const cur = parseInt(input.value, 10) || 0;
+      input.value = clamp(cur + delta, min, max);
+    });
+  });
+
+  /* ============================================================
+   *  Event: Minimize / Restore toggle
+   * ============================================================ */
+  minimizeBtn.addEventListener('click', () => {
+    const isMin = widget.classList.toggle('minimized');
+    minimizeBtn.textContent = isMin ? '▢' : '—';
+    minimizeBtn.title       = isMin ? '展开' : '最小化';
+  });
+
+  /* ============================================================
+   *  Prevent negative / zero inputs
+   * ============================================================ */
+  [inputRounds, inputExercise, inputRest].forEach(input => {
+    input.addEventListener('blur', () => {
+      const minVal = parseInt(input.min, 10) || 1;
+      const val    = parseInt(input.value, 10);
+      if (!isFinite(val) || val < minVal) {
+        input.value = minVal;
+      }
+    });
+  });
+
+  /* ============================================================
+   *  Initial render
+   * ============================================================ */
+  showSetup();
+</script>
+</body>
+</html>
