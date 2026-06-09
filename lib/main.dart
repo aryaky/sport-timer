@@ -130,7 +130,14 @@ class _SportTimerHomeState extends State<SportTimerHome> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: _buildCurrentView(),
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: _buildCurrentView(),
+        ),
+      ),
     );
   }
 

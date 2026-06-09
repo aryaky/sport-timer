@@ -98,13 +98,12 @@ class _GlassCardState extends State<GlassCard> {
                 ),
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // 顶部渐变色彩条
                   _GradientStrip(gradientColors: _effectiveGradient),
-                  // 内容区域
-                  Flexible(child: widget.child),
+                  // 内容区域 — Expanded 让子内容填满剩余空间
+                  Expanded(child: widget.child),
                 ],
               ),
             ),

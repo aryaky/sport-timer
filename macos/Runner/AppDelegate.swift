@@ -10,4 +10,12 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
+  
+  override func applicationDidFinishLaunching(_ notification: Notification) {
+    super.applicationDidFinishLaunching(notification)
+    // Ensure window is visible (mainFlutterWindow is inherited from FlutterAppDelegate)
+    if let window = self.mainFlutterWindow {
+      window.makeKeyAndOrderFront(self)
+    }
+  }
 }
