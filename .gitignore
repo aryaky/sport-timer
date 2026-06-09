@@ -1,3 +1,45 @@
+# OS files
 .DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Agent / work tools
 .workbuddy/
 .codebuddy/
+_disabled/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins-dependencies
+.packages
+build/
+*.dart.js
+*.js_
+*.js.deps
+*.js.map
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+android/key.properties
+
+# iOS / macOS
+ios/Pods/
+ios/.symlinks/
+macos/Pods/
+macos/.symlinks/
+*.mode1v3
+*.mode2v3
+*.pbxuser
+*.perspectivev3
+xcuserdata/
+
+# General
+*.log
+*.swp
+*.swo
